@@ -9,6 +9,8 @@ jobs:
   release:
     name: Build and Release
     runs-on: macos-15
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout
@@ -32,22 +34,30 @@ jobs:
         run: |
           codesign --force --deep --sign - build/Build/Products/Release/Reef.app
 
-      - name: Create zip
+      - name: Create DMG
         run: |
-          cd build/Build/Products/Release && zip -r ../../../../Reef-${{ github.ref_name }}.zip Reef.app
+          mkdir -p dmg-staging
+          cp -r build/Build/Products/Release/Reef.app dmg-staging/
+          ln -s /Applications dmg-staging/Applications
+          hdiutil create \
+            -volname "Reef ${{ github.ref_name }}" \
+            -srcfolder dmg-staging \
+            -ov \
+            -format UDZO \
+            Reef-${{ github.ref_name }}.dmg
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: Reef-${{ github.ref_name }}.zip
+          files: Reef-${{ github.ref_name }}.dmg
           generate_release_notes: true
           draft: false
           prerelease: false
           body: |
             ## Installation
 
-            1. Download `Reef-${{ github.ref_name }}.zip` from the assets below and unzip it.
-            2. Drag `Reef.app` into your `/Applications` folder.
+            1. Download `Reef-${{ github.ref_name }}.dmg` from the assets below.
+            2. Open the DMG and drag `Reef.app` into the `Applications` shortcut.
             3. Launch Reef from `/Applications`.
 
             If macOS blocks the app on first launch (Gatekeeper), run the following command in Terminal to remove the quarantine flag:
