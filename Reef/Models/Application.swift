@@ -13,6 +13,16 @@ class Application {
     var title: String
     var element: AXUIElement?
 
+    var icon: NSImage? {
+        if let runningApplication {
+            return runningApplication.icon
+        }
+        if let bundleUrl {
+            return NSWorkspace.shared.icon(forFile: bundleUrl.path)
+        }
+        return nil
+    }
+
     var runningApplication: NSRunningApplication?
     var pid: pid_t?
     var bundleIdentifier: String?
@@ -238,18 +248,44 @@ class Application {
     
     func getWindows() -> [Window] {
         let axWindows = self.getAXWindows()
-        var windows = axWindows.map { axWindow in
-            Window(axWindow, self)
+
+        if !axWindows.isEmpty {
+            var windows = axWindows.map { Window($0, self) }
+            // Finder can expose a trailing generic "Finder" window that is not useful for switching.
+            if bundleIdentifier == "com.apple.finder",
+               let lastWindow = windows.last,
+               lastWindow.title == "Finder" {
+                windows.removeLast()
+            }
+            return windows
         }
-        
-        // Finder can expose a trailing generic "Finder" window that is not useful for switching.
-        if bundleIdentifier == "com.apple.finder",
-           let lastWindow = windows.last,
-           lastWindow.title == "Finder" {
-            windows.removeLast()
+
+        // AX returned nothing (common for Firefox-based apps, Electron apps, etc.).
+        // Fall back to CGWindowListCopyWindowInfo filtered by PID.
+        guard isRunning, let pid = self.pid else { return [] }
+        return getCGWindows(pid: pid)
+    }
+
+    private func getCGWindows(pid: pid_t) -> [Window] {
+        // optionOnScreenOnly: only real visible windows — filters out background/utility processes
+        guard let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else {
+            return []
         }
-        
-        return windows
+
+        return list.compactMap { info -> Window? in
+            guard
+                let ownerPID = info[kCGWindowOwnerPID as String] as? Int,
+                ownerPID == Int(pid),
+                let rawID = info[kCGWindowNumber as String] as? Int,
+                let layer = info[kCGWindowLayer as String] as? Int,
+                layer == 0,  // Normal window layer — excludes menus, sheets, overlays
+                let alpha = info[kCGWindowAlpha as String] as? Double,
+                alpha > 0    // Must be visible — excludes hidden utility windows
+            else { return nil }
+
+            let title = info[kCGWindowName as String] as? String
+            return Window(cgWindowID: CGWindowID(rawID), title: title, application: self)
+        }
     }
     
     func listAvailableAttributes() -> [String] {

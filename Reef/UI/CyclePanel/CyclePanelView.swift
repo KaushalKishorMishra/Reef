@@ -9,100 +9,91 @@ import SwiftUI
 
 struct CyclePanelView: View {
     @ObservedObject var state: CyclePanelState
+    @AppStorage("panelDimming") private var panelDimming: Double = 0.0
 
-    private let headerPadding: Double = 12
-    private let maxNonScrollingRows: Int = 5
-    
-    private func itemTitle(_ item: CyclePanelItem) -> String {
-        switch item {
-        case .window(let window):
-            return window.title
-        case .action(let action):
-            return action.title
+    var body: some View {
+        if state.isActionMode, let action = state.actionMode {
+            actionCard(action: action)
+        } else {
+            previewCard
         }
     }
-    
-    var body: some View {
+
+    // MARK: - Preview card (app has windows)
+
+    private var previewCard: some View {
         VStack(spacing: 0) {
-            // Header
+            header
+            Divider()
+                .background(Color.white.opacity(0.2))
+            thumbnailArea
+        }
+        .frame(width: 480)
+        .background(Color.black.opacity(panelDimming))
+    }
+
+    private var header: some View {
+        HStack(spacing: 10) {
+            if let icon = state.applicationIcon {
+                Image(nsImage: icon)
+                    .resizable()
+                    .frame(width: 32, height: 32)
+            }
             Text(state.applicationTitle)
                 .font(.headline)
                 .foregroundColor(.white)
                 .lineLimit(1)
-                .padding(.vertical, headerPadding)
-
-            
-            Divider()
-                .background(Color.white.opacity(0.2))
-            
-            // Window list
-            if state.items.count <= maxNonScrollingRows {
-                VStack(spacing: 4) {
-                    ForEach(Array(state.items.enumerated()), id: \.offset) { index, item in
-                        CyclePanelRow(
-                            title: itemTitle(item),
-                            isSelected: index == state.selectedIndex
-                        )
-                        .id(index)
-                    }
-                }
-                .padding(8)
-            } else {
-                ScrollViewReader { proxy in
-                    ScrollView {
-                        VStack(spacing: 4) {
-                            ForEach(Array(state.items.enumerated()), id: \.offset) { index, item in
-                                CyclePanelRow(
-                                    title: itemTitle(item),
-                                    isSelected: index == state.selectedIndex
-                                )
-                                .id(index)
-                            }
-                        }
-                        .padding(8)
-                    }
-                    .onChange(of: state.selectedIndex) {
-                        withAnimation(.easeInOut(duration: 0.15)) {
-                            proxy.scrollTo(state.selectedIndex, anchor: .center)
-                        }
-                    }
-                }
-            }
-        }
-        .frame(width: 400)
-        .background(Color.clear)
-    }
-}
-
-struct CyclePanelRow: View {
-    let title: String
-    let isSelected: Bool
-
-    private let rowHeight: CGFloat = 44
-    
-    var body: some View {
-        HStack(spacing: 12) {
-            // Selection indicator
-            Circle()
-                .fill(isSelected ? Color.accentColor : Color.clear)
-                .frame(width: 6, height: 6)
-//            Image(systemName: "fish.fill")
-//                .opacity(isSelected ? 1.0 : 0.0)
-//                .frame(width: 6, height: 6)
-            
-            Text(title)
-                .foregroundColor(isSelected ? .white : .primary)
-                .lineLimit(1)
-            
             Spacer()
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .frame(height: rowHeight)
-        .background(
-            RoundedRectangle(cornerRadius: 6)
-                .fill(isSelected ? Color.accentColor.opacity(0.3) : Color.clear)
-            
-        )
+        .padding(.vertical, 14)
+    }
+
+    @ViewBuilder
+    private var thumbnailArea: some View {
+        if let thumbnail = state.thumbnail {
+            Image(decorative: thumbnail, scale: 1.0)
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+                .frame(width: 480, height: 300)
+                .clipped()
+        } else {
+            ZStack {
+                Color.white.opacity(0.05)
+                ProgressView()
+                    .progressViewStyle(.circular)
+                    .scaleEffect(0.8)
+                    .tint(.white)
+            }
+            .frame(width: 480, height: 300)
+        }
+    }
+
+    // MARK: - Action card (no windows / app not running)
+
+    private func actionCard(action: CyclePanelAction) -> some View {
+        VStack(spacing: 10) {
+            if let icon = state.applicationIcon {
+                Image(nsImage: icon)
+                    .resizable()
+                    .frame(width: 56, height: 56)
+            }
+            Text(state.applicationTitle)
+                .font(.headline)
+                .foregroundColor(.white)
+                .lineLimit(1)
+            Text(action.subtitle)
+                .font(.caption)
+                .foregroundColor(.white.opacity(0.55))
+            Text(action.title)
+                .font(.caption)
+                .fontWeight(.semibold)
+                .foregroundColor(.white.opacity(0.9))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+                .background(Capsule().fill(Color.white.opacity(0.18)))
+        }
+        .frame(width: 320)
+        .padding(.vertical, 28)
     }
 }

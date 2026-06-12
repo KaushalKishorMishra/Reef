@@ -76,27 +76,16 @@ final class ShortcutController {
             NSSound.beep()
             return
         }
-        
-        // If panel is already visible, cycle if same app; otherwise switch to the newly requested app.
+
         if cycleController.panel.isVisible {
-            if cycleController.isShowingSwitcher(for: binding) {
-                cycleController.cycleNext()
-            } else {
+            // Different app — switch to it; same app — do nothing (preview already showing)
+            if !cycleController.isShowingSwitcher(for: binding) {
                 cycleController.showSwitcher(for: binding)
             }
-            
             return
         }
 
-        // Determine starting index
-        var startIndex = 0
-        if let frontApp = Application.getFrontApplication(),
-           frontApp.title == binding.title {
-            // Already on this app, start at second window
-            startIndex = 1
-        }
-        
-        cycleController.showSwitcher(for: binding, startIndex: startIndex)
+        cycleController.showSwitcher(for: binding)
     }
     
     func handleProfile(number: Int) {

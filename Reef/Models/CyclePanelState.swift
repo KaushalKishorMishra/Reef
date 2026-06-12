@@ -6,89 +6,88 @@
 //
 
 import Foundation
+import AppKit
+import ScreenCaptureKit
 
 enum CyclePanelAction {
     case launchApp
     case openWindow
-    
+
     var title: String {
         switch self {
-        case .launchApp:
-            return "Launch app"
-        case .openWindow:
-            return "Focus app"
+        case .launchApp: return "Launch"
+        case .openWindow: return "Focus"
         }
     }
-}
 
-enum CyclePanelItem {
-    case window(Window)
-    case action(CyclePanelAction)
+    var subtitle: String {
+        switch self {
+        case .launchApp: return "Release to launch"
+        case .openWindow: return "Release to focus"
+        }
+    }
 }
 
 @MainActor
 final class CyclePanelState: ObservableObject {
     @Published var applicationTitle: String = ""
-    @Published var items: [CyclePanelItem] = []
-    @Published var selectedIndex: Int = 0
-    
-    var windows: [Window] {
-        items.compactMap { item in
-            if case let .window(window) = item {
-                return window
-            }
-            
-            return nil
-        }
-    }
-    
-    var currentItem: CyclePanelItem? {
-        guard !items.isEmpty, selectedIndex < items.count else { return nil }
-        return items[selectedIndex]
-    }
-    
-    var currentWindow: Window? {
-        guard let currentItem else { return nil }
-        
-        if case let .window(window) = currentItem {
-            return window
-        }
-        
-        return nil
-    }
-    
-    var currentAction: CyclePanelAction? {
-        guard let currentItem else { return nil }
-        
-        if case let .action(action) = currentItem {
-            return action
-        }
-        
-        return nil
-    }
-    
+    @Published var applicationIcon: NSImage? = nil
+    @Published var thumbnail: CGImage? = nil
+    @Published var actionMode: CyclePanelAction? = nil
+
+    var isActionMode: Bool { actionMode != nil }
+
     func setApplication(_ application: Application) {
-        self.applicationTitle = application.title
-        
+        applicationTitle = application.title
+        applicationIcon = application.icon
+        thumbnail = nil
+        actionMode = nil
+
         let windows = application.getWindows()
         if windows.isEmpty {
-            let action: CyclePanelAction = application.isRunning ? .openWindow : .launchApp
-            self.items = [.action(action)]
-        } else {
-            self.items = windows.map(CyclePanelItem.window)
+            actionMode = application.isRunning ? .openWindow : .launchApp
+        } else if let windowID = windows.first?.cgWindowID {
+            capturePreview(windowID: windowID)
         }
-        
-        self.selectedIndex = 0
     }
-    
-    func cycleNext() {
-        guard !items.isEmpty else { return }
-        selectedIndex = (selectedIndex + 1) % items.count
-    }
-    
+
     func reset() {
-        items = []
-        selectedIndex = 0
         applicationTitle = ""
+        applicationIcon = nil
+        thumbnail = nil
+        actionMode = nil
+    }
+
+    // MARK: - Thumbnail capture
+
+    private func capturePreview(windowID: CGWindowID) {
+        Task {
+            if let image = await Self.captureImage(windowID: windowID) {
+                thumbnail = image
+            } else {
+                // Capture failed — window is gone or Screen Recording not granted.
+                // Show the focus action card so the user isn't stuck on a spinner.
+                if actionMode == nil {
+                    actionMode = .openWindow
+                }
+            }
+        }
+    }
+
+    private static nonisolated func captureImage(windowID: CGWindowID) async -> CGImage? {
+        guard let content = try? await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: false) else {
+            return nil
+        }
+
+        guard let scWindow = content.windows.first(where: { $0.windowID == windowID }) else {
+            return nil
+        }
+
+        let filter = SCContentFilter(desktopIndependentWindow: scWindow)
+        let config = SCStreamConfiguration()
+        config.width = 960
+        config.height = 600
+
+        return try? await SCScreenshotManager.captureImage(contentFilter: filter, configuration: config)
     }
 }

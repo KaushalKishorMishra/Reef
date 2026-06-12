@@ -16,36 +16,28 @@ final class CyclePanelController: NSObject {
     private var flagsMonitor: Any?
     private var keyDownMonitor: Any?
     private var currentApplication: Application?
-    private var panelAnchorCenter: CGPoint?
 
-    private let panelContentWidth: CGFloat = 400
-    private let maxPanelFrameHeightCap: CGFloat = 520
+    // Preview card: header (60) + divider (1) + thumbnail (300)
+    private let previewContentWidth: CGFloat  = 480
+    private let previewContentHeight: CGFloat = 361
 
-    // Keep these aligned with CyclePanelView.
-    private let headerHeight: CGFloat = 44
-    private let dividerHeight: CGFloat = 1
-    private let rowHeight: CGFloat = 44
-    private let rowSpacing: CGFloat = 4
-    private let listVerticalPadding: CGFloat = 8
+    // Action card (no windows / not running)
+    private let actionContentWidth: CGFloat  = 320
+    private let actionContentHeight: CGFloat = 176
 
-    private var minPanelContentHeight: CGFloat {
-        // Minimum height that still matches the layout for one row.
-        headerHeight + dividerHeight + (listVerticalPadding * 2) + rowHeight
-    }
-    
     override init() {
         super.init()
         createPanel()
     }
-    
+
     private func createPanel() {
-        let contentRect = NSRect(x: 0, y: 0, width: panelContentWidth, height: 300)
+        let contentRect = NSRect(x: 0, y: 0, width: previewContentWidth, height: previewContentHeight)
         panel = CyclePanel(contentRect: contentRect)
-        
+
         let contentView = CyclePanelView(state: state)
         let hostingView = NSHostingView(rootView: contentView)
         hostingView.translatesAutoresizingMaskIntoConstraints = false
-        
+
         guard let containerView = panel.contentView else { return }
         containerView.addSubview(hostingView)
         NSLayoutConstraint.activate([
@@ -55,140 +47,87 @@ final class CyclePanelController: NSObject {
             hostingView.bottomAnchor.constraint(equalTo: containerView.bottomAnchor)
         ])
     }
-    
+
     // Called when user presses Ctrl+[number]
-    func showSwitcher(for application: Application, startIndex: Int = 0) {
+    func showSwitcher(for application: Application) {
         currentApplication = application
         state.setApplication(application)
-        
-        // If starting index is provided (e.g., already on that app), use it
-        if startIndex > 0 && startIndex < state.items.count {
-            state.selectedIndex = startIndex
-        }
-        
+
         if !panel.isVisible {
-            panel.center()
-            panelAnchorCenter = CGPoint(x: panel.frame.midX, y: panel.frame.midY)
             updatePanelSize()
+            panel.center()
             panel.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
             installFlagsMonitor()
             installKeyDownMonitor()
         } else {
-            if panelAnchorCenter == nil {
-                panelAnchorCenter = CGPoint(x: panel.frame.midX, y: panel.frame.midY)
-            }
             updatePanelSize()
         }
     }
 
     private func updatePanelSize() {
-        let itemCount = state.items.count
-        let rowsHeight = CGFloat(itemCount) * rowHeight
-        let spacingHeight = CGFloat(max(0, itemCount - 1)) * rowSpacing
-        let listHeight = rowsHeight + spacingHeight + (listVerticalPadding * 2)
-        let desiredContentHeight = headerHeight + dividerHeight + listHeight
+        let width  = state.isActionMode ? actionContentWidth  : previewContentWidth
+        let height = state.isActionMode ? actionContentHeight : previewContentHeight
 
-        let maxContentHeightByScreen: CGFloat = {
-            let visibleFrameHeight = (panel.screen ?? NSScreen.main)?.visibleFrame.height ?? maxPanelFrameHeightCap
-            let maxFrameHeight = min(maxPanelFrameHeightCap, visibleFrameHeight * 0.6)
-            let maxFrameRect = NSRect(x: 0, y: 0, width: panelContentWidth, height: maxFrameHeight)
-            return panel.contentRect(forFrameRect: maxFrameRect).height
-        }()
+        let contentRect = NSRect(x: 0, y: 0, width: width, height: height)
+        let targetFrameSize = panel.frameRect(forContentRect: contentRect).size
 
-        let clampedContentHeight = max(minPanelContentHeight, min(desiredContentHeight, maxContentHeightByScreen))
-        let targetContentRect = NSRect(x: 0, y: 0, width: panelContentWidth, height: clampedContentHeight)
-        let targetFrameSize = panel.frameRect(forContentRect: targetContentRect).size
-
-        // Keep the panel pinned to the same center while Ctrl is held.
-        let center = panelAnchorCenter ?? CGPoint(x: panel.frame.midX, y: panel.frame.midY)
+        let center = CGPoint(x: panel.frame.midX, y: panel.frame.midY)
         let newOrigin = CGPoint(
             x: center.x - targetFrameSize.width / 2,
             y: center.y - targetFrameSize.height / 2
         )
-        let newFrame = NSRect(origin: newOrigin, size: targetFrameSize)
+        panel.setFrame(NSRect(origin: newOrigin, size: targetFrameSize), display: true, animate: false)
+    }
 
-        panel.setFrame(newFrame, display: true, animate: false)
-    }
-    
-    // Called when user presses Ctrl+[number] again while panel is visible
-    func cycleNext() {
-        state.cycleNext()
-    }
-    
     func isShowingSwitcher(for application: Application) -> Bool {
         guard let currentApplication else { return false }
-        
+
         if let currentBundleID = currentApplication.bundleIdentifier,
            let targetBundleID = application.bundleIdentifier {
             return currentBundleID == targetBundleID
         }
-        
+
         if let currentURL = currentApplication.bundleUrl,
            let targetURL = application.bundleUrl {
             return currentURL == targetURL
         }
-        
+
         return currentApplication.title == application.title
     }
-    
+
     // Called when user releases Ctrl
-    func activateSelectedWindow() {
-        guard let item = state.currentItem else {
-            hideSwitcher()
-            return
-        }
-        
-        switch item {
-        case .window(let window):
-            window.focus()
-            hideSwitcher()
-        case .action:
-            let application = currentApplication
-            hideSwitcher()
-            
-            Task { @MainActor in
-                guard let application else {
-                    NSSound.beep()
-                    return
-                }
-                
-                let success = await application.performNoWindowAction()
-                if !success {
-                    NSSound.beep()
-                }
-            }
+    func activateApp() {
+        let application = currentApplication
+        hideSwitcher()
+
+        Task { @MainActor in
+            guard let application else { return }
+            let success = await application.performNoWindowAction()
+            if !success { NSSound.beep() }
         }
     }
-    
+
     private func hideSwitcher() {
         removeFlagsMonitor()
         removeKeyDownMonitor()
         panel.orderOut(nil)
         state.reset()
         currentApplication = nil
-        panelAnchorCenter = nil
     }
-    
+
     private func installFlagsMonitor() {
         guard flagsMonitor == nil else { return }
-        
+
         flagsMonitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
-            guard let self = self else { return event }
-            
-            let controlPressed = event.modifierFlags.contains(.control)
-            
-            // Control was released
-            if !controlPressed {
-                Task { @MainActor in
-                    self.activateSelectedWindow()
-                }
+            guard let self else { return event }
+            if !event.modifierFlags.contains(.control) {
+                Task { @MainActor in self.activateApp() }
             }
-            
             return event
         }
     }
-    
+
     private func removeFlagsMonitor() {
         if let monitor = flagsMonitor {
             NSEvent.removeMonitor(monitor)
@@ -200,13 +139,10 @@ final class CyclePanelController: NSObject {
         guard keyDownMonitor == nil else { return }
 
         keyDownMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard let self else { return event }
+            guard let self, self.panel.isVisible else { return event }
 
-            // Escape closes the switcher.
-            if self.panel.isVisible, event.keyCode == 53 {
-                Task { @MainActor in
-                    self.hideSwitcher()
-                }
+            if event.keyCode == 53 { // Escape — close without switching
+                Task { @MainActor in self.hideSwitcher() }
                 return nil
             }
 
@@ -220,17 +156,9 @@ final class CyclePanelController: NSObject {
             keyDownMonitor = nil
         }
     }
-    
-    deinit {
-        // Capture the monitor in a local variable before deinit (while still on main actor)
-        let monitor = flagsMonitor
-        if let monitor {
-            NSEvent.removeMonitor(monitor)
-        }
 
-        let keyMonitor = keyDownMonitor
-        if let keyMonitor {
-            NSEvent.removeMonitor(keyMonitor)
-        }
+    deinit {
+        if let monitor = flagsMonitor  { NSEvent.removeMonitor(monitor) }
+        if let monitor = keyDownMonitor { NSEvent.removeMonitor(monitor) }
     }
 }

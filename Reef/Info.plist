@@ -8,5 +8,7 @@
 	<string>ZbMve8wfUSQghxEPXBhrQsQlI0zlkswHqeUJD1B0lFc=</string>
 	<key>SUFeedURL</key>
 	<string>https://gouwsxander.github.io/Reef/appcast.xml</string>
+	<key>NSScreenCaptureUsageDescription</key>
+	<string>Reef uses screen recording to show window previews in the switcher panel.</string>
 </dict>
 </plist>

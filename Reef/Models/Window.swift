@@ -11,46 +11,57 @@ import Cocoa
 
 class Window: Identifiable {
     var id: CGWindowID { cgWindowID ?? 0 }
-    var element: AXUIElement
+    var element: AXUIElement?
     var cgWindowID: CGWindowID?
     var application: Application
+    private var fallbackTitle: String?
 
+    // Standard init via Accessibility API
     init(_ element: AXUIElement, _ application: Application) {
         self.element = element
         self.cgWindowID = element.getWindowID()
         self.application = application
     }
-    
+
+    // Fallback init when AX is unavailable (e.g. Firefox-based apps)
+    init(cgWindowID: CGWindowID, title: String?, application: Application) {
+        self.element = nil
+        self.cgWindowID = cgWindowID
+        self.fallbackTitle = title
+        self.application = application
+    }
+
     var title: String {
-        if let title: String = self.element.getAttributeValue(.title) {
-            return title
-        }
-        
+        if let t = fallbackTitle, !t.isEmpty { return t }
+        if let t: String = element?.getAttributeValue(.title) { return t }
         return application.title
     }
-    
+
     func focus() {
-        do {
-            try self.element.performAction(.raise)
-            self.application.activate()
-        } catch {
-            try? self.application.reopen()
+        if let element = element {
+            do {
+                try element.performAction(.raise)
+                application.activate()
+                return
+            } catch {}
         }
+        // No AX element — activate the app; the OS surfaces the most-recently-used window.
+        application.activate()
     }
-    
+
     static func getFrontWindow() -> Window? {
         guard let frontApplication = Application.getFrontApplication() else {
             return nil
         }
-        
+
         if let focusedWindow = frontApplication.getFocusedWindow() {
             return focusedWindow
         }
-        
+
         if let firstWindow = frontApplication.getFirstWindow() {
             return firstWindow
         }
-        
+
         return nil
     }
 }
