@@ -13,14 +13,13 @@ import ServiceManagement
 struct ReefApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @StateObject private var profileManager: ProfileManager
-    @StateObject private var sparkleConnector = SparkleConnector()
     @AppStorage("launchOnLogin") private var launchOnLogin = true
-    
+
     init() {
         let profileManager = ProfileManager()
         _profileManager = StateObject(wrappedValue: profileManager)
         AppDelegate.profileManager = profileManager
-        
+
         // Sync launch at login state with system
         if #available(macOS 13.0, *) {
             let status = SMAppService.mainApp.status
@@ -32,7 +31,6 @@ struct ReefApp: App {
         Settings {
             PreferencesView()
                 .environmentObject(profileManager)
-                .environmentObject(sparkleConnector)
         }
         .windowStyle(.hiddenTitleBar)
         .windowResizability(.contentSize)
@@ -40,7 +38,6 @@ struct ReefApp: App {
         MenuBarExtra {
             MenuBarView()
                 .environmentObject(profileManager)
-                .environmentObject(sparkleConnector)
         } label: {
             Image("menu_placeholder")
                 .renderingMode(.template)
@@ -53,19 +50,24 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     static private(set) var instance: AppDelegate!
     static var profileManager: ProfileManager!
     static private(set) var modifierManager: ModifierManager!
-    
+
     private var cycleController: CyclePanelController!
     private var shortcutManager: ShortcutController!
     private var windowManager: PreferencesController!
-    
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         AppDelegate.instance = self
         AppDelegate.modifierManager = ModifierManager()
-        
+
         cycleController = CyclePanelController()
         shortcutManager = ShortcutController(cycleController, AppDelegate.profileManager)
         windowManager = PreferencesController()
-        
+
+        // Close any settings windows restored by macOS from the previous session.
+        for window in NSApp.windows where PreferencesController.isLikelySettingsWindow(window) {
+            window.close()
+        }
+
         NSApp.setActivationPolicy(.accessory)
     }
 

@@ -30,8 +30,10 @@ final class CyclePanelController: NSObject {
         createPanel()
     }
 
+    private var previewPanelHeight: CGFloat { 61 + state.thumbnailHeight }
+
     private func createPanel() {
-        let contentRect = NSRect(x: 0, y: 0, width: previewContentWidth, height: previewContentHeight)
+        let contentRect = NSRect(x: 0, y: 0, width: previewContentWidth, height: previewPanelHeight)
         panel = CyclePanel(contentRect: contentRect)
 
         let contentView = CyclePanelView(state: state)
@@ -46,39 +48,65 @@ final class CyclePanelController: NSObject {
             hostingView.topAnchor.constraint(equalTo: containerView.topAnchor),
             hostingView.bottomAnchor.constraint(equalTo: containerView.bottomAnchor)
         ])
+
+        state.onStateChanged = { [weak self] in
+            self?.handleAsyncStateChange()
+        }
     }
 
-    // Called when user presses Ctrl+[number]
+    private func handleAsyncStateChange() {
+        guard panel.isVisible else { return }
+        updatePanelSize()
+        positionPanelBelowMenuBar()
+    }
+
+    // MARK: - Switcher lifecycle
+
     func showSwitcher(for application: Application) {
         currentApplication = application
         state.setApplication(application)
 
         if !panel.isVisible {
             updatePanelSize()
-            panel.center()
+            positionPanelBelowMenuBar()
             panel.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
             installFlagsMonitor()
             installKeyDownMonitor()
         } else {
             updatePanelSize()
+            positionPanelBelowMenuBar()
         }
     }
 
+    // MARK: - Panel sizing and positioning
+
     private func updatePanelSize() {
         let width  = state.isActionMode ? actionContentWidth  : previewContentWidth
-        let height = state.isActionMode ? actionContentHeight : previewContentHeight
-
+        let height = state.isActionMode ? actionContentHeight : previewPanelHeight
         let contentRect = NSRect(x: 0, y: 0, width: width, height: height)
-        let targetFrameSize = panel.frameRect(forContentRect: contentRect).size
-
-        let center = CGPoint(x: panel.frame.midX, y: panel.frame.midY)
-        let newOrigin = CGPoint(
-            x: center.x - targetFrameSize.width / 2,
-            y: center.y - targetFrameSize.height / 2
-        )
-        panel.setFrame(NSRect(origin: newOrigin, size: targetFrameSize), display: true, animate: false)
+        let targetSize = panel.frameRect(forContentRect: contentRect).size
+        // Anchor to top edge when height changes so panel grows downward.
+        let topY = panel.frame.maxY
+        let newOrigin = CGPoint(x: panel.frame.origin.x, y: topY - targetSize.height)
+        panel.setFrame(NSRect(origin: newOrigin, size: targetSize), display: true, animate: false)
     }
+
+    /// Positions the panel horizontally centered on the main screen, just below the menu bar.
+    private func positionPanelBelowMenuBar() {
+        guard let screen = NSScreen.main else {
+            panel.center()
+            return
+        }
+        let frameSize = panel.frame.size
+        let gap: CGFloat = 8
+        let x = max(8, min(screen.frame.width - frameSize.width - 8,
+                            screen.frame.midX - frameSize.width / 2))
+        let y = screen.visibleFrame.maxY - frameSize.height - gap
+        panel.setFrameOrigin(CGPoint(x: x, y: y))
+    }
+
+    // MARK: - App activation
 
     func isShowingSwitcher(for application: Application) -> Bool {
         guard let currentApplication else { return false }
@@ -96,7 +124,6 @@ final class CyclePanelController: NSObject {
         return currentApplication.title == application.title
     }
 
-    // Called when user releases Ctrl
     func activateApp() {
         let application = currentApplication
         hideSwitcher()
@@ -115,6 +142,8 @@ final class CyclePanelController: NSObject {
         state.reset()
         currentApplication = nil
     }
+
+    // MARK: - Event monitors
 
     private func installFlagsMonitor() {
         guard flagsMonitor == nil else { return }

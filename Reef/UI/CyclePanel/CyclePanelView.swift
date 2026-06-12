@@ -25,7 +25,7 @@ struct CyclePanelView: View {
         VStack(spacing: 0) {
             header
             Divider()
-                .background(Color.white.opacity(0.2))
+                .background(Color.white.opacity(0.15))
             thumbnailArea
         }
         .frame(width: 480)
@@ -33,20 +33,22 @@ struct CyclePanelView: View {
     }
 
     private var header: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 12) {
             if let icon = state.applicationIcon {
                 Image(nsImage: icon)
                     .resizable()
-                    .frame(width: 32, height: 32)
+                    .frame(width: 40, height: 40)
+                    .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
             }
             Text(state.applicationTitle)
-                .font(.headline)
+                .font(.title3)
+                .fontWeight(.semibold)
                 .foregroundColor(.white)
                 .lineLimit(1)
             Spacer()
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 14)
+        .padding(.vertical, 10)
     }
 
     @ViewBuilder
@@ -55,7 +57,7 @@ struct CyclePanelView: View {
             Image(decorative: thumbnail, scale: 1.0)
                 .resizable()
                 .aspectRatio(contentMode: .fill)
-                .frame(width: 480, height: 300)
+                .frame(width: 480, height: state.thumbnailHeight)
                 .clipped()
         } else {
             ZStack {
@@ -65,33 +67,35 @@ struct CyclePanelView: View {
                     .scaleEffect(0.8)
                     .tint(.white)
             }
-            .frame(width: 480, height: 300)
+            .frame(width: 480, height: state.thumbnailHeight)
         }
     }
 
     // MARK: - Action card (no windows / app not running)
 
     private func actionCard(action: CyclePanelAction) -> some View {
-        VStack(spacing: 10) {
+        VStack(spacing: 8) {
             if let icon = state.applicationIcon {
                 Image(nsImage: icon)
                     .resizable()
-                    .frame(width: 56, height: 56)
+                    .frame(width: 64, height: 64)
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             }
             Text(state.applicationTitle)
-                .font(.headline)
+                .font(.title3)
+                .fontWeight(.semibold)
                 .foregroundColor(.white)
                 .lineLimit(1)
             Text(action.subtitle)
-                .font(.caption)
-                .foregroundColor(.white.opacity(0.55))
+                .font(.subheadline)
+                .foregroundColor(.white.opacity(0.5))
             Text(action.title)
-                .font(.caption)
+                .font(.footnote)
                 .fontWeight(.semibold)
-                .foregroundColor(.white.opacity(0.9))
-                .padding(.horizontal, 10)
-                .padding(.vertical, 4)
-                .background(Capsule().fill(Color.white.opacity(0.18)))
+                .foregroundColor(.white.opacity(0.85))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 5)
+                .background(Capsule().fill(Color.white.opacity(0.15)))
         }
         .frame(width: 320)
         .padding(.vertical, 28)
