@@ -9,69 +9,10 @@ import SwiftUI
 
 struct CyclePanelView: View {
     @ObservedObject var state: CyclePanelState
-    @AppStorage("panelDimming") private var panelDimming: Double = 0.0
 
     var body: some View {
-        if state.isActionMode, let action = state.actionMode {
-            actionCard(action: action)
-        } else {
-            previewCard
-        }
+        actionCard(action: state.actionMode)
     }
-
-    // MARK: - Preview card (app has windows)
-
-    private var previewCard: some View {
-        VStack(spacing: 0) {
-            header
-            Divider()
-                .background(Color.white.opacity(0.15))
-            thumbnailArea
-        }
-        .frame(width: 480)
-        .background(Color.black.opacity(panelDimming))
-    }
-
-    private var header: some View {
-        HStack(spacing: 12) {
-            if let icon = state.applicationIcon {
-                Image(nsImage: icon)
-                    .resizable()
-                    .frame(width: 40, height: 40)
-                    .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
-            }
-            Text(state.applicationTitle)
-                .font(.title3)
-                .fontWeight(.semibold)
-                .foregroundColor(.white)
-                .lineLimit(1)
-            Spacer()
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-    }
-
-    @ViewBuilder
-    private var thumbnailArea: some View {
-        if let thumbnail = state.thumbnail {
-            Image(decorative: thumbnail, scale: 1.0)
-                .resizable()
-                .aspectRatio(contentMode: .fill)
-                .frame(width: 480, height: state.thumbnailHeight)
-                .clipped()
-        } else {
-            ZStack {
-                Color.white.opacity(0.05)
-                ProgressView()
-                    .progressViewStyle(.circular)
-                    .scaleEffect(0.8)
-                    .tint(.white)
-            }
-            .frame(width: 480, height: state.thumbnailHeight)
-        }
-    }
-
-    // MARK: - Action card (no windows / app not running)
 
     private func actionCard(action: CyclePanelAction) -> some View {
         VStack(spacing: 8) {
@@ -97,7 +38,7 @@ struct CyclePanelView: View {
                 .padding(.vertical, 5)
                 .background(Capsule().fill(Color.white.opacity(0.15)))
         }
-        .frame(width: 320)
+        .frame(width: 280)
         .padding(.vertical, 28)
     }
 }

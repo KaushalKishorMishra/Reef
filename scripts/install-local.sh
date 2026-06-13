@@ -38,6 +38,10 @@ echo "▶ Installing to ${INSTALL_PATH}..."
 rm -rf "${INSTALL_PATH}"
 cp -r "${BUILT_APP}" "${INSTALL_PATH}"
 
+# Ad-hoc sign so TCC keeps a stable permission entry across installs.
+echo "▶ Signing..."
+codesign --force --deep --sign - "${INSTALL_PATH}"
+
 echo "▶ Relaunching Reef..."
 open "${INSTALL_PATH}"
 
